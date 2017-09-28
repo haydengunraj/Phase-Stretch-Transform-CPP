@@ -1,0 +1,8 @@
+*.pyc
+*.DS_Store
+Debug/
+x64/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+.vs/
