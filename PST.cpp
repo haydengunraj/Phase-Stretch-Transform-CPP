@@ -20,6 +20,7 @@ void PST(Mat I, Handles handles, bool Morph_flag, Mat & out, Mat & PST_Kernel) {
 	Mat THETA(X.size(), CV_64FC1);
 	Mat RHO(Y.size(), CV_64FC1);
 	cart2pol(X, Y, THETA, RHO);
+
 	// Define two dimensional cartesian frequency vectors, FX and FY
 	double X_step = x[1] - x[0];
 	vector<double> fx = linspace(-L / X_step, L / X_step, x.size());
