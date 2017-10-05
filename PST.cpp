@@ -2,7 +2,6 @@
 #include<math.h>
 #include "PST.h"
 
-using namespace std;
 using namespace cv;
 
 const complex<double> k(0, 1);
