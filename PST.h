@@ -20,23 +20,21 @@ void PST(Mat I, Handles handles, bool Morph_flag, Mat & out, Mat & PST_Kernel);
 
 vector<double> linspace(double a, double b, int n);
 
-void tdgrid(vector<double> x, vector<double> y, Mat & xOut, Mat & yOut);
+void tdgrid(std::vector<double> r, std::vector<double> c, Mat & rMat, Mat & cMat);
 
 void cart2pol(Mat x, Mat y, Mat & theta, Mat & rho);
 
-Mat fftshift(Mat in);
+void fftshift(Mat & in, Mat & out);
 
-Mat matexp(Mat in);
+void exp(Mat & in, Mat & out, std::complex<double> mult);
 
-void splitmatexp(Mat input, Mat re, Mat im, complex<double> mult);
+Mat pow(Mat in, int p);
 
-Mat matpow(Mat in, int p);
+Mat atan(Mat in);
 
-Mat matatan(Mat in);
+Mat log(Mat in);
 
-Mat matlog(Mat in);
-
-Mat matphase(Mat re, Mat im);
+Mat phase(Mat re, Mat im);
 
 Mat complexMul(Mat A, Mat B);
 

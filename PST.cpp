@@ -43,8 +43,10 @@ void PST(Mat I, Handles handles, bool Morph_flag, Mat & out, Mat & PST_Kernel) {
 	dft(Image_orig_f, Image_orig_f);
 	split(Image_orig_f, planes);
 	double sigma = (handles.LPF * handles.LPF) / log(2);
-	planes[0] = planes[0].mul(fftshift(matexp(-matpow((RHO / sqrt(sigma)), 2))));
-	planes[1] = planes[1].mul(fftshift(matexp(-matpow((RHO / sqrt(sigma)), 2))));
+	exp(-pow((RHO / sqrt(sigma)), 2), temp);
+	fftshift(temp, temp);
+	planes[0] = planes[0].mul(temp);
+	planes[1] = planes[1].mul(temp);
 	merge(planes, 2, Image_orig_f);
 	Mat Image_orig_filtered;
 	idft(Image_orig_f, Image_orig_filtered, cv::DFT_SCALE | cv::DFT_INVERSE);
@@ -53,24 +55,23 @@ void PST(Mat I, Handles handles, bool Morph_flag, Mat & out, Mat & PST_Kernel) {
 	merge(planes, 2, Image_orig_filtered);
 
 	// Construct the PST Kernel
-	PST_Kernel = (RHO * handles.Warp_strength).mul(matatan(RHO * handles.Warp_strength)) - 0.5 * matlog(1 + matpow(RHO * handles.Warp_strength, 2));
+	PST_Kernel = (RHO * handles.Warp_strength).mul(atan(RHO * handles.Warp_strength)) - 0.5 * log(1 + pow(RHO * handles.Warp_strength, 2));
 	double min, max;
 	minMaxLoc(PST_Kernel, &min, &max);
 	PST_Kernel = PST_Kernel / max * handles.Phase_strength;
 	
 	// Apply the PST Kernel (problem)
 	dft(Image_orig_filtered, temp);
-	Mat jkern[] = { Mat::zeros(PST_Kernel.size(), CV_64FC1), Mat::zeros(PST_Kernel.size(), CV_64FC1) };
-	splitmatexp(PST_Kernel, jkern[0], jkern[1], -k);
-	Mat shift;
-	merge(jkern, 2, shift);
-	temp = complexMul(temp, fftshift(shift));
+	Mat jkern, shift; // [] = { Mat::zeros(PST_Kernel.size(), CV_64FC1), Mat::zeros(PST_Kernel.size(), CV_64FC1) };
+	exp(PST_Kernel, jkern, -k);
+	fftshift(jkern, shift);
+	temp = complexMul(temp, shift);
 	Mat Image_orig_filtered_PST;
 	idft(temp, Image_orig_filtered_PST, cv::DFT_SCALE | cv::DFT_INVERSE);
 
 	// Calculate phase of the transformed image
 	split(Image_orig_filtered_PST, planes);
-	Mat PHI_features = matphase(planes[0], planes[1]);
+	Mat PHI_features = phase(planes[0], planes[1]);
 
 	if (!Morph_flag) {
 		out = PHI_features;
@@ -108,37 +109,47 @@ vector<double> linspace(double a, double b, int n) {
 	return arr;
 }
 
-void tdgrid(vector<double> x, vector<double> y, Mat & xOut, Mat & yOut) {
-	int xSize = x.size();
-	int ySize = y.size();
-	for (int i = 0; i < xSize; i++) {
-		for (int j = 0; j < ySize; j++) {
-			xOut.at<double>(i, j) = x[i];
-			yOut.at<double>(i, j) = y[j];
+void tdgrid(std::vector<double> r, std::vector<double> c, Mat & rMat, Mat & cMat) {
+	int rows = r.size();
+	int cols = c.size();
+	rMat = Mat(rows, cols, CV_64FC1);
+	cMat = Mat(rows, cols, CV_64FC1);
+	for (int i = 0; i < rows; i++) {
+		double* ri = rMat.ptr<double>(i);
+		double* ci = cMat.ptr<double>(i);
+		for (int j = 0; j < cols; j++) {
+			ri[j] = r[i];
+			ci[j] = c[j];
 		}
 	}
 }
 
 void cart2pol(Mat x, Mat y, Mat & theta, Mat & rho) {
-	int xSize = x.cols;
-	int ySize = x.rows;
-	for (int i = 0; i < ySize; i++) {
-		for (int j = 0; j < xSize; j++) {
-			theta.at<double>(i, j) = atan2(y.at<double>(i, j), x.at<double>(i, j));
-			rho.at<double>(i, j) = hypot(x.at<double>(i, j), y.at<double>(i, j));
+	int rows = x.rows;
+	int cols = x.cols;
+	theta = Mat(rows, cols, CV_64FC1);
+	rho = Mat(rows, cols, CV_64FC1);
+	for (int i = 0; i < rows; i++) {
+		double* ti = theta.ptr<double>(i);
+		double* ri = rho.ptr<double>(i);
+		for (int j = 0; j < cols; j++) {
+			ti[j] = atan2(y.at<double>(i, j), x.at<double>(i, j));
+			ri[j] = hypot(x.at<double>(i, j), y.at<double>(i, j));
 		}
 	}
 }
 
-Mat fftshift(Mat in) {
-	int mxl = in.cols / 2;
-	int myl = in.rows / 2;
-	int mxh = ceil(in.cols / 2.0);
-	int myh = ceil(in.rows / 2.0);
-	Mat q0(in, Rect(0, 0, mxh, myh));
-	Mat q1(in, Rect(mxh, 0, mxl, myh));
-	Mat q2(in, Rect(0, myh, mxh, myl));
-	Mat q3(in, Rect(mxh, myh, mxl, myl));
+void fftshift(Mat & in, Mat & out) {
+	out = in.clone();
+	int mx1, my1, mx2, my2;
+	mx1 = out.cols / 2;
+	my1 = out.rows / 2;
+	mx2 = int(ceil(out.cols / 2.0));
+	my2 = int(ceil(out.rows / 2.0));
+	Mat q0(out, Rect(0, 0, mx2, my2));
+	Mat q1(out, Rect(mx2, 0, mx1, my2));
+	Mat q2(out, Rect(0, my2, mx2, my1));
+	Mat q3(out, Rect(mx2, my2, mx1, my1));
 	Mat tmp;
 	q0.copyTo(tmp);
 	q3.copyTo(q0);
@@ -146,74 +157,75 @@ Mat fftshift(Mat in) {
 	q2.copyTo(tmp);
 	q1.copyTo(q2);
 	tmp.copyTo(q1);
-	vconcat(q1, q3, in);
+	vconcat(q1, q3, out);
 	vconcat(q0, q2, tmp);
-	hconcat(tmp, in, in);
-	return in;
+	hconcat(tmp, out, out);
 }
 
-Mat matexp(Mat in) {
-	int xSize = in.cols;
-	int ySize = in.rows;
-	for (int i = 0; i < ySize; i++) {
-		for (int j = 0; j < xSize; j++) {
-			in.at<double>(i, j) = exp(in.at<double>(i, j));
+void exp(Mat & in, Mat & out, std::complex<double> mult) {
+	int rows = in.rows;
+	int cols = in.cols;
+	Mat re = Mat(rows, cols, CV_64FC1);
+	Mat im = Mat(rows, cols, CV_64FC1);
+	for (int i = 0; i < rows; i++) {
+		double * rei = re.ptr<double>(i);
+		double * imi = im.ptr<double>(i);
+		double * ini = in.ptr<double>(i);
+		for (int j = 0; j < cols; j++) {
+			std::complex<double> val = exp(ini[j] * mult);
+			rei[j] = real(val);
+			imi[j] = imag(val);
+		}
+	}
+	Mat temp[] = { re, im };
+	merge(temp, 2, out);
+}
+
+Mat pow(Mat in, int p) {
+	int rows = in.rows;
+	int cols = in.cols;
+	for (int i = 0; i < rows; i++) {
+		double * ini = in.ptr<double>(i);
+		for (int j = 0; j < cols; j++) {
+			ini[j] = pow(ini[j], p);
 		}
 	}
 	return in;
 }
 
-void splitmatexp(Mat input, Mat re, Mat im, complex<double> mult) {
-	int xSize = input.cols;
-	int ySize = input.rows;
-	for (int i = 0; i < ySize; i++) {
-		for (int j = 0; j < xSize; j++) {
-			complex<double> val = exp(input.at<double>(i, j) * mult);
-			re.at<double>(i, j) = real(val);
-			im.at<double>(i, j) = imag(val);
-		}
-	}
-}
-
-Mat matpow(Mat in, int p) {
-	int xSize = in.cols;
-	int ySize = in.rows;
-	for (int i = 0; i < ySize; i++) {
-		for (int j = 0; j < xSize; j++) {
-			in.at<double>(i, j) = pow(in.at<double>(i, j), p);
+Mat atan(Mat in) {
+	int rows = in.rows;
+	int cols = in.cols;
+	for (int i = 0; i < rows; i++) {
+		double * ini = in.ptr<double>(i);
+		for (int j = 0; j < cols; j++) {
+			ini[j] = atan(ini[j]);
 		}
 	}
 	return in;
 }
 
-Mat matatan(Mat in) {
-	int xSize = in.cols;
-	int ySize = in.rows;
-	for (int i = 0; i < ySize; i++) {
-		for (int j = 0; j < xSize; j++) {
-			in.at<double>(i, j) = atan(in.at<double>(i, j));
+
+Mat log(Mat in) {
+	int rows = in.rows;
+	int cols = in.cols;
+	for (int i = 0; i < rows; i++) {
+		double * ini = in.ptr<double>(i);
+		for (int j = 0; j < cols; j++) {
+			ini[j] = log(ini[j]);
 		}
 	}
 	return in;
 }
 
-Mat matlog(Mat in) {
-	int xSize = in.cols;
-	int ySize = in.rows;
-	for (int i = 0; i < ySize; i++) {
-		for (int j = 0; j < xSize; j++) {
-			in.at<double>(i, j) = log(in.at<double>(i, j));
-		}
-	}
-	return in;
-}
-
-Mat matphase(Mat re, Mat im) {
-	int xSize = re.cols;
-	int ySize = re.rows;
-	for (int i = 0; i < ySize; i++) {
-		for (int j = 0; j < xSize; j++) {
-			re.at<double>(i, j) = atan2(im.at<double>(i, j), re.at<double>(i, j));
+Mat phase(Mat re, Mat im) {
+	int rows = re.rows;
+	int cols = re.cols;
+	for (int i = 0; i < rows; i++) {
+		double * rei = re.ptr<double>(i);
+		double * imi = im.ptr<double>(i);
+		for (int j = 0; j < cols; j++) {
+			rei[j] = atan2(imi[j], rei[j]);
 		}
 	}
 	return re;
